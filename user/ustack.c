@@ -43,7 +43,7 @@ void *ustack_malloc(uint len) {
     new_header->len = len;
 
     // Set the dealloc_page value
-    new_header->dealloc_page = (uint)sbrk(0);
+    new_header->dealloc_page = (uint64)sbrk(0);
 
     // Set the current buffer to the new buffer
     current = new_header;
@@ -63,13 +63,13 @@ int ustack_free() {
     int len = current->len;
 
     // Check if we need to deallocate a page
-    if((uint)sbrk(0) > current->dealloc_page) {
+    if((uint64)sbrk(0) > current->dealloc_page) {
         // Decrease the program break by a page size, effectively deallocating the page
         sbrk(-PGSIZE);
     }
 
     // Decrease the program break to the start of the previous buffer, effectively deallocating the buffer
-    sbrk((uint)current->prev - (uint)sbrk(0));
+    sbrk((uint64)current->prev - (uint64)sbrk(0));
 
     // Set the current buffer to the previous buffer
     current = current->prev;
