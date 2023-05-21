@@ -8,9 +8,9 @@ FROM mcr.microsoft.com/vscode/devcontainers/base:0-${VARIANT}
 # RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 #     && apt-get -y install --no-install-recommends <your-package-list-here>
 
-RUN apt-get update
-RUN apt-get upgrade -y
-RUN apt-get install -y git build-essential gdb-multiarch qemu-system-misc gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu 
+RUN apt-get update && echo "Update succeeded."
+RUN apt-get upgrade -y && echo "Upgrade succeeded."
+RUN apt-get install -y git build-essential gdb-multiarch qemu-system-misc gcc-riscv64-linux-gnu binutils-riscv64-linux-gnu && echo "Install succeeded."
 # enable loading custom .gdbinit per folder.
 # RUN echo set auto-load safe-path / > /root/.gdbinit
 RUN echo set architecture riscv:rv64 > /root/.gdbinit
