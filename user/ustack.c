@@ -1,79 +1,77 @@
 #include "ustack.h"
 
-struct header {
-    uint len; // Length of the buffer
-    uint dealloc_page; // Page to deallocate when buffer is freed
-    struct header* prev; // Pointer to the previous header
-};
+struct buffer buffer_stack[MAX_BUFFERS];
+int stack_ptr = -1; // empty stack
 
-struct header *current = 0; // Pointer to the current buffer's header
-
-
-void *ustack_malloc(uint len) {
-    // Check if requested buffer size is within limit
-    if(len > 512) {
-        return (void *)-1;
-    }
-
-    // Add the size of the header to the length
-    uint total_len = len + sizeof(struct header);
-
-    // Round up to nearest page size if necessary
-    if (total_len % PGSIZE != 0) {
-        total_len = (total_len + PGSIZE - 1) & ~(PGSIZE - 1);
-    }
-
-    // Try to increase the program break to create space for the new buffer
-    // If this fails, return -1
-    if(sbrk(total_len) == (void *)-1) {
-        return (void *)-1;
-    }
-
-    // Get the current program break and cast it to the header struct pointer
-    struct header *new_header = (struct header *) (sbrk(0) - total_len);
-
-    // Check if there's a previously allocated buffer, if yes then link it
-    if(current) {
-        new_header->prev = current;
-    } else {
-        new_header->prev = 0; // If not, this is the first allocated buffer
-    }
-
-    // Set the length of the buffer
-    new_header->len = len;
-
-    // Set the dealloc_page value
-    new_header->dealloc_page = (uint64)sbrk(0);
-
-    // Set the current buffer to the new buffer
-    current = new_header;
-
-    // Return a pointer to the start of the buffer
-    return (void *)(new_header + 1);
+int get_ptr(){
+    return stack_ptr;
 }
 
 
-int ustack_free() {
-    // Check if there's a buffer to free, if not return -1
-    if(current == 0) {
-        return -1;
+struct header {
+    uint len;
+    uint page_flag;
+    struct header* prev;
+};
+
+struct header *current = 0; // Pointer to the current header
+
+static struct header *curr = 0;
+static char* stack_pointer;
+
+//static header *freep ;
+
+
+void* ustack_malloc(uint len){
+   
+    char *p;
+    struct header *new_header;
+
+    
+    if (len > MAX_BUFFER_SIZE){
+        return (void*)-1; // Exceeded maximum allowed size
     }
 
-    // Store the length of the buffer to return later
-    int len = current->len;
-
-    // Check if we need to deallocate a page
-    if((uint64)sbrk(0) > current->dealloc_page) {
-        // Decrease the program break by a page size, effectively deallocating the page
-        sbrk(-PGSIZE);
+    if(curr == 0){ //initialization
+        p = sbrk(PGSIZE);
+        if(p == (char*)-1)
+            return (void*)-1;
+        new_header = (struct header*)p;
+    }
+    else if (PGROUNDDOWN((uint64)(stack_pointer + len)) !=  (uint64)sbrk(0)) //need to alloc new page
+    {
+        p = sbrk(PGSIZE);
+        if(p == (char*)-1)
+            return (void*)-1;
+        new_header = (struct header*)p;
+        new_header->page_flag = 1;
+    }
+    else{
+        new_header = (struct header*)(stack_pointer );
     }
 
-    // Decrease the program break to the start of the previous buffer, effectively deallocating the buffer
-    sbrk((uint64)current->prev - (uint64)sbrk(0));
+    new_header->prev = curr;
+    new_header->len = len;
+    curr = new_header;
+    stack_pointer =(char*) new_header + len;
+    return (void*)stack_pointer;
+}
 
-    // Set the current buffer to the previous buffer
-    current = current->prev;
 
-    // Return the length of the deallocated buffer
-    return len;
+
+int ustack_free(void){
+    if (curr){
+        char *p;
+        int del_size = curr->len;
+        curr = curr->prev;
+        stack_pointer = stack_pointer - del_size;
+        if (curr->page_flag == 1)
+        {
+            p = sbrk(-PGSIZE);
+            if(p == (char*)-1)
+                return -1;
+        }
+        return del_size; 
+    }
+    return -1;
 }
