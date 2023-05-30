@@ -114,6 +114,32 @@ exec(char *path, char **argv)
   // value, which goes in a0.
   p->trapframe->a1 = sp;
 
+  if(p->pid > 2) {
+      for (int i = 0; i < MAX_TOTAL_PAGES; i++){
+        p->swap_data[i].startVa = 0;
+        if (p->swap_data[i].state == SWAP)
+          {
+            p->swap--;
+          }
+        else if (p->swap_data[i].state == RAM)
+          {
+            p->ram--;
+          }
+        p->swap_data[i].state = FREE;
+      }     
+      for(uint i = 0, a = 0; a < sz; a += PGSIZE, i ++){
+        p->swap_data[i].startVa = a;
+        p->swap_data[i].state = RAM;
+        p->ram++;
+      }
+      if(removeSwapFile(p) < 0){
+        panic("Failed to remove swap file");
+      }
+      if(createSwapFile(p) < 0){
+        panic("Failed to add swap file");
+      }
+  }
+
   // Save program name for debugging.
   for(last=s=path; *s; s++)
     if(*s == '/')

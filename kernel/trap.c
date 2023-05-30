@@ -67,7 +67,26 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  }else if(r_scause() == 13 || r_scause() == 15 )
+  {
+    // printf("val: %d\n",r_stval());
+    uint64 add = PGROUNDDOWN(r_stval());
+    pte_t *pte = walk(p->pagetable,add,0);
+
+    if(pte != 0 && ((*pte & PTE_V) == 0) && ((*pte & PTE_PG) != 0)){
+      if (p->ram == MAX_PSYC_PAGES){
+        int i = find_page_in_ram(p);
+        if (i == -1){
+          printf("error, no ram?!!!!\n");
+          exit(-1);
+        }
+        pte_t *pte2 = walk(p->pagetable,p->swap_data[i].startVa,0);
+        insert_to_swapFile(p,pte2,p->swap_data[i].startVa,i);
+        insert_to_ram(p,pte,add);
+      }    
+    }
+  }
+   else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     setkilled(p);

@@ -26,6 +26,143 @@ extern char trampoline[]; // trampoline.S
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
 
+static int
+copy_swapFile(struct proc *p,struct proc *np)
+{
+  int stat = 0;
+  for (int i = 0; i < MAX_TOTAL_PAGES && stat != -1; i++)
+  {
+    char *buff = kalloc();
+    readFromSwapFile(p, buff, p->swap_data[i].off, PGSIZE);
+    writeToSwapFile(np,buff,p->swap_data[i].off,PGSIZE);
+    kfree(buff);
+
+    np->swap_data[i].state = p->swap_data[i].state;
+    np->swap_data[i].state = p->swap_data[i].startVa;
+
+
+  }
+
+  np->ram = p->ram;
+  np->swap = p->swap; 
+  return stat;
+  
+}
+
+int update_meta(struct proc *p,uint64 va,int ramFlag)
+{
+  for (int i = 0; i < MAX_TOTAL_PAGES; i++)
+  {
+    if ( p->swap_data[i].state == FREE){
+      p->swap_data[i].startVa = va;
+      if (ramFlag){
+        p->ram++;
+        p->swap_data[i].state = RAM;
+      }
+      else{
+        p->swap++;
+        p->swap_data[i].state = SWAP;
+      }
+      return i;
+    }
+  }
+  /*need to check my logic*/
+  printf("over 32\n");
+  exit(-1);
+  return -1;
+}
+
+int
+find_page_in_ram(struct proc *p){
+  for (int i = 0; i < MAX_TOTAL_PAGES; i++)
+  {
+    if (p->swap_data[i].state == RAM){
+      return i;
+    }
+  }
+  return -1;
+}
+
+int
+find_page_va(struct proc *p,uint64 va){
+  for (int i = 0; i < MAX_TOTAL_PAGES; i++)
+  {
+    if (p->swap_data[i].startVa == va){
+      return i;
+    }
+  }
+  return -1;
+}
+
+
+int
+find_page_in_swap(struct proc *p, uint64 startVa){
+  for (int i = 0; i < MAX_TOTAL_PAGES; i++)
+  {
+    if (p->swap_data[i].state == SWAP && startVa == p->swap_data[i].startVa){
+      return i;
+    }
+  }
+  return -1;
+}
+
+int
+insert_to_ram(struct proc *p, pte_t *pte, uint64 startVa)
+{
+  int i = find_page_in_swap(p,startVa);
+
+  if (i == -1){
+    printf("error! couldnt find page\n");
+    return -1;
+  }
+  char *pa = kalloc();
+
+  readFromSwapFile(p,pa,p->swap_data[i].off,PGSIZE);
+
+  p->swap_data[i].state = RAM;
+  p->ram++;
+  p->swap--;
+
+  /*bit shit*/
+  uint flags = PTE_FLAGS(*pte);
+  *pte = PA2PTE(pa) | PTE_V | flags;
+
+  return 0;
+}
+
+int
+insert_to_swapFile(struct proc *p, pte_t *pte, uint64 startVa,int index)
+{
+  uint i;
+
+  if(p->swapFile == 0)
+    return -1;
+  
+  if (index == -1)
+    i = update_meta(p,startVa,0);
+  else{
+    i = index;
+    p->ram--;
+    p->swap++;
+    p->swap_data[i].startVa = startVa;
+    p->swap_data[i].state = SWAP;
+  }
+
+  if (i == -1){
+    printf("error in update_meta\n");
+    return -1;
+  }
+  writeToSwapFile(p, (char *) PTE2PA(*pte), p->swap_data[i].off, PGSIZE);
+  kfree((void *) PTE2PA(*pte));
+
+  /*debuge, should we change it?*/
+
+  // *pte = (i << PGSHIFT) | PTE_FLAGS(*pte);
+  *pte &= ~PTE_V;
+  *pte |= PTE_PG;
+  return 0;
+}
+
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
 // guard page.
@@ -55,6 +192,11 @@ procinit(void)
       initlock(&p->lock, "proc");
       p->state = UNUSED;
       p->kstack = KSTACK((int) (p - proc));
+      for (int i = 0; i < MAX_TOTAL_PAGES; i++)
+      {
+        p->swap_data[i].off = i * PGSIZE;
+        p->swap_data[i].state = FREE;
+      } 
   }
 }
 
@@ -101,6 +243,15 @@ allocpid()
 
   return pid;
 }
+
+// static void allocSwapData(struct proc* p)
+// {
+//   for (int i = 0; i < SWAP_SIZE; i++)
+//   {
+//     p->swap_data[i].off = i * PGSIZE;
+//     p->swap_data[i].use = 0;
+//   } 
+// }
 
 // Look in the process table for an UNUSED proc.
 // If found, initialize state required to run in the kernel,
@@ -256,6 +407,8 @@ userinit(void)
 
 // Grow or shrink user memory by n bytes.
 // Return 0 on success, -1 on failure.
+// Grow or shrink user memory by n bytes.
+// Return 0 on success, -1 on failure.
 int
 growproc(int n)
 {
@@ -317,6 +470,27 @@ fork(void)
   acquire(&wait_lock);
   np->parent = p;
   release(&wait_lock);
+
+  if (np->pid > 2){
+    int stat = createSwapFile(np);
+    if (stat != 0){
+      acquire(&np->lock);
+      freeproc(np);
+      release(&np->lock);
+      return -1;
+    }
+  }
+
+  if (p->pid > 2){
+    int stat = copy_swapFile(p,np);
+    if (stat !=  0){
+      acquire(&np->lock);
+      freeproc(np);
+      release(&np->lock);
+    }
+  }
+
+  
 
   acquire(&np->lock);
   np->state = RUNNABLE;

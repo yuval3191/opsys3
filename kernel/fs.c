@@ -792,7 +792,6 @@ removeSwapFile(struct proc* p)
 int
 createSwapFile(struct proc* p)
 {
-
   char path[DIGITS];
   memmove(path,"/.swap", 6);
   itoa(p->pid, path+ 6);

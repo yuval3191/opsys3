@@ -1,3 +1,5 @@
+
+
 // Saved registers for kernel context switches.
 struct context {
   uint64 ra;
@@ -81,6 +83,14 @@ struct trapframe {
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+enum metaState { FREE, RAM, SWAP };
+
+typedef struct meta{
+  uint64          off;
+  uint64          startVa;
+  enum metaState  state;
+}meta;
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -106,4 +116,7 @@ struct proc {
   char name[16];               // Process name (debugging)
 
   struct file *swapFile;
+  meta swap_data[MAX_TOTAL_PAGES];
+  int ram;
+  int swap;
 };

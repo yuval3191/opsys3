@@ -5,7 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
-
+#include "spinlock.h"
+#include "proc.h"
 /*
  * the kernel's page table.
  */
@@ -92,8 +93,8 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
     pte_t *pte = &pagetable[PX(level, va)];
     if(*pte & PTE_V) {
       pagetable = (pagetable_t)PTE2PA(*pte);
-    } else {
-      if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
+    } else { 
+      if(!alloc ||(pagetable = (pde_t*)kalloc()) == 0)
         return 0;
       memset(pagetable, 0, PGSIZE);
       *pte = PA2PTE(pagetable) | PTE_V;
@@ -153,7 +154,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_V)
+    if(*pte & PTE_V && ((*pte & PTE_PG)==0))
       panic("mappages: remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
@@ -172,6 +173,7 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 {
   uint64 a;
   pte_t *pte;
+  struct proc *p = myproc();
 
   if((va % PGSIZE) != 0)
     panic("uvmunmap: not aligned");
@@ -179,14 +181,30 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
-    if((*pte & PTE_V) == 0)
+    if((*pte & PTE_V) == 0 && (((*pte & PTE_PG)==0)))
       panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
-    if(do_free){
+    if(do_free && ((*pte & PTE_PG) == 0)){
       uint64 pa = PTE2PA(*pte);
       kfree((void*)pa);
     }
+
+    /*update pages*/
+    if (p->pid > 2){
+      uint64 down_a = PGROUNDDOWN(a);
+      int i = find_page_va(p,down_a);
+      if (i != -1){
+        if (p->swap_data[i].state == RAM){
+          p->ram--;
+        }
+        else{
+          p->swap--;
+        }
+      p->swap_data[i].state = FREE;
+      p->swap_data[i].startVa = 0;
+    }
+  }
     *pte = 0;
   }
 }
@@ -225,8 +243,11 @@ uvmfirst(pagetable_t pagetable, uchar *src, uint sz)
 uint64
 uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
 {
+  struct proc *p = myproc();
   char *mem;
   uint64 a;
+  pte_t *pte;
+
 
   if(newsz < oldsz)
     return oldsz;
@@ -243,6 +264,14 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
       kfree(mem);
       uvmdealloc(pagetable, a, oldsz);
       return 0;
+    }
+    if (p->ram < MAX_PSYC_PAGES){
+      if (update_meta(p,a,1) == -1)
+        printf("error at update_meta\n");
+    }
+    else{
+      pte = walk(p->pagetable,a,0);
+      insert_to_swapFile(p,pte,a,-1);
     }
   }
   return newsz;
@@ -313,7 +342,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
-    if((*pte & PTE_V) == 0)
+    if(((*pte & PTE_V) == 0) && ((*pte & PTE_PG)==0))
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
@@ -324,7 +353,11 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       kfree(mem);
       goto err;
     }
+
+    pte_t *new_pte = walk(new, i, 0);
+    *new_pte = *new_pte | PTE_FLAGS(*pte);
   }
+
   return 0;
 
  err:
