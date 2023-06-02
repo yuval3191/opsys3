@@ -122,7 +122,7 @@ int update_meta(struct proc *p,uint64 va,int ramFlag, int index)
           p->swap_data[i].state = RAM;
 
             #if SCFIFO
-              p->swap_data[index].createTime = p->timeId;
+              p->swap_data[i].createTime = p->timeId;
               p->timeId = p->timeId + 1;
             #endif
         }
@@ -145,11 +145,11 @@ int update_meta(struct proc *p,uint64 va,int ramFlag, int index)
   }
 
   #if NFUA
-    p->swap_data[index].counter = 0;
+    p->swap_data[ret].counter = 0;
   #endif
   
   #if LAPA
-    p->swap_data[index].counter = 0xFFFFFFFF;
+    p->swap_data[ret].counter = 0xFFFFFFFF;
   #endif
 
   return ret;
