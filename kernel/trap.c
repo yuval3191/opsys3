@@ -89,6 +89,10 @@ usertrap(void)
           i = find_page_SCFIFO(p);
         #endif
 
+        #ifndef SWAP_ALGO
+          i = find_page_in_ram(p);
+        #endif
+
         if (i == -1){
           printf("error, no ram?!!!!\n");
           exit(-1);

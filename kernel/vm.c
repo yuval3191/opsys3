@@ -241,7 +241,7 @@ uvmfirst(pagetable_t pagetable, uchar *src, uint sz)
 // Allocate PTEs and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
 uint64
-uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
+uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm, int opFlag)
 {
   struct proc *p = myproc();
   char *mem;
@@ -273,6 +273,8 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
       }
       else{
         pte = walk(p->pagetable,a,0);
+        // if (opFlag)
+        //   end_op();
         insert_to_swapFile(p,pte,a,-1);
       }
     }
