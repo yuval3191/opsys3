@@ -39,33 +39,121 @@ copy_swapFile(struct proc *p,struct proc *np)
 
     np->swap_data[i].state = p->swap_data[i].state;
     np->swap_data[i].state = p->swap_data[i].startVa;
-
+    np->swap_data[i].createTime = p->swap_data[i].createTime;
 
   }
 
   np->ram = p->ram;
-  np->swap = p->swap; 
+  np->swap = p->swap;
+  np->timeId = p->timeId; 
   return stat;
   
 }
 
-int update_meta(struct proc *p,uint64 va,int ramFlag)
+static void sortArrayByCreateTime(meta array[], int size) {
+    for (int i = 0; i < size - 1; i++) {
+        for (int j = 0; j < size - i - 1; j++) {
+            if (array[j].createTime > array[j + 1].createTime) {
+                meta temp = array[j];
+                array[j] = array[j + 1];
+                array[j + 1] = temp;
+            }
+        }
+    }
+}
+
+
+int find_page_SCFIFO(struct proc *p)
+{
+  sortArrayByCreateTime(p->swap_data,MAX_TOTAL_PAGES);
+
+  while(1){
+    for (int i = 0; i < MAX_TOTAL_PAGES; i++)
+    {
+      meta page = p->swap_data[i];
+      if ( page.state == RAM)
+      {
+        pte_t *pte = walk(p->pagetable,page.startVa,0);
+        if ((*pte & PTE_A) == 0)
+        {
+          return i;
+        }
+        else{
+          *pte &= ~PTE_A;
+        }
+      }
+    }
+  }
+}
+
+int update_aging(struct proc *p)
 {
   for (int i = 0; i < MAX_TOTAL_PAGES; i++)
   {
-    if ( p->swap_data[i].state == FREE){
-      p->swap_data[i].startVa = va;
-      if (ramFlag){
-        p->ram++;
-        p->swap_data[i].state = RAM;
+    meta page = p->swap_data[i];
+    if ( page.state == RAM)
+    {
+      pte_t *pte = walk(p->pagetable,page.startVa,0);
+
+      if (pte == 0)
+        printf("wht??\n");
+
+      page.counter = page.counter >> 1;
+      if ((*pte & PTE_A) != 0)
+      {
+        page.counter = page.counter | (1 << 31);
+        *pte &= ~PTE_A;
       }
-      else{
-        p->swap++;
-        p->swap_data[i].state = SWAP;
-      }
-      return i;
     }
   }
+  return 0;
+}
+
+int update_meta(struct proc *p,uint64 va,int ramFlag, int index)
+{
+  int ret = -1;
+  if (index == -1){
+    for (int i = 0; i < MAX_TOTAL_PAGES; i++)
+    {
+      if ( p->swap_data[i].state == FREE){
+        p->swap_data[i].startVa = va;
+        if (ramFlag){
+          p->ram++;
+          p->swap_data[i].state = RAM;
+
+            #if SCFIFO
+              p->swap_data[index].createTime = p->timeId;
+              p->timeId = p->timeId + 1;
+            #endif
+        }
+        else{
+          p->swap++;
+          p->swap_data[i].state = SWAP;
+        }
+        ret = i;
+        break;
+      }
+    }
+  }
+  else
+  {
+    p->ram--;
+    p->swap++;
+    p->swap_data[index].startVa = va;
+    p->swap_data[index].state = SWAP;
+    ret = index;
+  }
+
+  #if NFUA
+    p->swap_data[index].counter = 0;
+  #endif
+  
+  #if LAPA
+    p->swap_data[index].counter = 0xFFFFFFFF;
+  #endif
+
+  return ret;
+
   /*need to check my logic*/
   printf("over 32\n");
   exit(-1);
@@ -81,6 +169,72 @@ find_page_in_ram(struct proc *p){
     }
   }
   return -1;
+}
+
+static int countSetBits(unsigned int num) 
+{
+    int count = 0;
+    while (num != 0) {
+        count += num & 1;
+        num >>= 1;
+    }
+    return count;
+}
+
+static int find_min_ones(struct proc *p)
+{
+  unsigned int count;
+  unsigned int min = 0xFFFFFFFF;
+  for (int i = 0; i < MAX_TOTAL_PAGES; i++)
+  {
+    if (p->swap_data[i].state == RAM)
+    {
+      count = countSetBits(p->swap_data[i].counter);
+      if (countSetBits(p->swap_data[i].counter) < min)
+      {
+        min = count;
+      }
+    }
+  }
+  return min;
+}
+
+int find_page_LAPA(struct proc *p)
+{
+  unsigned int minOnes = find_min_ones(p);
+  unsigned int minCounter = 0xFFFFFFFF;
+  int index = -1;
+  for (int i = 0; i < MAX_TOTAL_PAGES; i++)
+  {
+    if (p->swap_data[i].state == RAM)
+    {
+      if (countSetBits(p->swap_data[i].counter) == minOnes){
+        if (p->swap_data[i].counter <= minCounter){
+            minCounter = p->swap_data[i].counter;
+            index = i;
+        }
+      }
+    }
+  }
+
+  return index;
+}
+
+int find_page_NFUA(struct proc *p)
+{
+  unsigned int min = 0xFFFFFFFF;
+  int index = -1;
+  for (int i = 0; i < MAX_TOTAL_PAGES; i++)
+  {
+    if (p->swap_data[i].state == RAM)
+    {
+      if (p->swap_data[i].counter <= min){
+        min = p->swap_data[i].counter;
+        index = i;
+      }
+    }
+  }
+  return index;
 }
 
 int
@@ -123,6 +277,11 @@ insert_to_ram(struct proc *p, pte_t *pte, uint64 startVa)
   p->ram++;
   p->swap--;
 
+  #if SCFIFO
+    p->swap_data[i].createTime = p->timeId;
+    p->timeId = p->timeId + 1;
+  #endif
+
   /*bit shit*/
   uint flags = PTE_FLAGS(*pte);
   *pte = PA2PTE(pa) | PTE_V | flags;
@@ -138,15 +297,7 @@ insert_to_swapFile(struct proc *p, pte_t *pte, uint64 startVa,int index)
   if(p->swapFile == 0)
     return -1;
   
-  if (index == -1)
-    i = update_meta(p,startVa,0);
-  else{
-    i = index;
-    p->ram--;
-    p->swap++;
-    p->swap_data[i].startVa = startVa;
-    p->swap_data[i].state = SWAP;
-  }
+  i = update_meta(p,startVa,0,index);
 
   if (i == -1){
     printf("error in update_meta\n");
@@ -473,6 +624,7 @@ fork(void)
 
   if (np->pid > 2){
     int stat = createSwapFile(np);
+    np->timeId = 0;
     if (stat != 0){
       acquire(&np->lock);
       freeproc(np);
@@ -636,6 +788,9 @@ scheduler(void)
         c->proc = p;
         swtch(&c->context, &p->context);
 
+        #if (NFUA || LAPA)
+          update_aging(p);
+        #endif
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;

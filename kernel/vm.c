@@ -265,14 +265,14 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
       uvmdealloc(pagetable, a, oldsz);
       return 0;
     }
-    if (p->ram < MAX_PSYC_PAGES){
-      if (update_meta(p,a,1) == -1)
-        printf("error at update_meta\n");
-    }
-    else{
-      pte = walk(p->pagetable,a,0);
-      insert_to_swapFile(p,pte,a,-1);
-    }
+      if (p->ram < MAX_PSYC_PAGES){
+        if (update_meta(p,a,1,-1) == -1)
+          printf("error at update_meta\n");
+      }
+      else{
+        pte = walk(p->pagetable,a,0);
+        insert_to_swapFile(p,pte,a,-1);
+      }
   }
   return newsz;
 }

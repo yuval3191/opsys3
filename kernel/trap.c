@@ -74,8 +74,21 @@ usertrap(void)
     pte_t *pte = walk(p->pagetable,add,0);
 
     if(pte != 0 && ((*pte & PTE_V) == 0) && ((*pte & PTE_PG) != 0)){
-      if (p->ram == MAX_PSYC_PAGES){
-        int i = find_page_in_ram(p);
+      if (p->ram == MAX_PSYC_PAGES)
+      {
+        int i = -1;
+        #if NFUA
+          i = find_page_NFUA(p);
+        #endif
+
+        #if LAPA
+          i = find_page_LAPA(p);
+        #endif
+
+        #if SCFIFO
+          i = find_page_SCFIFO(p);
+        #endif
+
         if (i == -1){
           printf("error, no ram?!!!!\n");
           exit(-1);

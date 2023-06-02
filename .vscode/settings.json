@@ -4,7 +4,8 @@
         "riscv.h": "c",
         "defs.h": "c",
         "spinlock.h": "c",
-        "user.h": "c"
+        "user.h": "c",
+        "limits": "c"
     },
     "C_Cpp.errorSquiggles": "disabled",
 }

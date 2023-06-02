@@ -85,11 +85,19 @@ enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 enum metaState { FREE, RAM, SWAP };
 
-typedef struct meta{
+typedef struct meta
+{
   uint64          off;
   uint64          startVa;
   enum metaState  state;
+  unsigned int    counter;
+  int             createTime;
 }meta;
+
+typedef struct node {
+  int index;
+  struct node* next;
+}node;
 
 // Per-process state
 struct proc {
@@ -119,4 +127,6 @@ struct proc {
   meta swap_data[MAX_TOTAL_PAGES];
   int ram;
   int swap;
+  int timeId;
+
 };

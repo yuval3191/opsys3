@@ -88,12 +88,15 @@ void            printfinit(void);
 
 // proc.c
 
-int update_meta(struct proc *p,uint64 va, int ramFlag);
+int update_meta(struct proc *p,uint64 va, int ramFlag, int index);
 int insert_to_swapFile(struct proc *p, pte_t *pte, uint64 startVa, int i);
 int insert_to_ram(struct proc *p, pte_t *pte, uint64 startVa);
 int find_page_in_ram(struct proc *p);
 int find_page_va(struct proc *p,uint64 va);
 int find_page_in_swap(struct proc *p, uint64 startVa);
+int find_page_NFUA(struct proc *p);
+int find_page_LAPA(struct proc *p);
+int find_page_SCFIFO(struct proc *p);
 
 int             cpuid(void);
 void            exit(int);
