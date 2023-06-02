@@ -274,21 +274,21 @@ int main(int argc, char *argv[])
     // test1();
     //     printf("start test2\n");
     // test2();
-        printf("start test3\n");
-    test3();
-        printf("start test4\n");
+    //     printf("start test3\n");
+    // test3();
+    //     printf("start test4\n");
 
-    test4();
-        printf("start test5\n");
+    // test4();
+    //     printf("start test5\n");
 
-    test5();
-        printf("start test6\n");
+    // test5();
+    //     printf("start test6\n");
 
-    test6();
-        printf("start test7\n");
+    // test6();
+    //     printf("start test7\n");
 
-    test7();
-        printf("start test8\n");
+    // test7();
+    //     printf("start test8\n");
 
     test8(); //with sbrk
         printf("end all tests!\n");

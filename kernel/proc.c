@@ -624,7 +624,6 @@ fork(void)
 
   if (np->pid > 2){
     int stat = createSwapFile(np);
-    np->timeId = 0;
     if (stat != 0){
       acquire(&np->lock);
       freeproc(np);
