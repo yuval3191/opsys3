@@ -50,9 +50,9 @@ endif
 
 QEMU = qemu-system-riscv64
 
-ifndef SWAP_ALGO
-	SWAP_ALGO := LAPA
-endif
+# ifndef SWAP_ALGO
+# 	SWAP_ALGO := LAPA
+# endif
 
 CC = $(TOOLPREFIX)gcc
 AS = $(TOOLPREFIX)gas
@@ -64,25 +64,25 @@ OBJDUMP = $(TOOLPREFIX)objdump
 
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
 
-# NFUA:=1
-# LAPA:=2
-# SCFIFO:=3
-# NONE:=0
-# CFLAGS += -DNFUA=$(NFUA)
-# CFLAGS += -DLAPA=$(LAPA)
-# CFLAGS += -DSCFIFO=$(SCFIFO)
-# CFLAGS += -DNONE=$(NONE)
-# CFLAGS += -DSWAP_ALGO=$(SWAP_ALGO)
-# ifndef SWAP_ALGO
-# 	SWAP_ALGO := SCFIFO
-# endif
+NFUA:=1
+LAPA:=2
+SCFIFO:=3
+NONE:=0
+CFLAGS += -DNFUA=$(NFUA)
+CFLAGS += -DLAPA=$(LAPA)
+CFLAGS += -DSCFIFO=$(SCFIFO)
+CFLAGS += -DNONE=$(NONE)
+CFLAGS += -DSWAP_ALGO=$(SWAP_ALGO)
+ifndef SWAP_ALGO
+	SWAP_ALGO := SCFIFO
+endif
 
 CFLAGS += -MD
 CFLAGS += -mcmodel=medany
 CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax
 CFLAGS += -I.
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
-CFLAGS += -D $(SWAP_ALGO)
+# CFLAGS += -D $(SWAP_ALGO)
 
 # Disable PIE when possible (for Ubuntu 16.10 toolchain)
 ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]no-pie'),)
@@ -177,7 +177,7 @@ QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	then echo "-gdb tcp::$(GDBPORT)"; \
 	else echo "-s -p $(GDBPORT)"; fi)
 ifndef CPUS
-CPUS := 1
+CPUS := 3
 endif
 
 QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS) -nographic

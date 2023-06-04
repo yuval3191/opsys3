@@ -203,6 +203,10 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
         }
       p->swap_data[i].state = FREE;
       p->swap_data[i].startVa = 0;
+
+      int k = p->swap_data[i].off/PGSIZE;
+      p->swap_location[k] = 0;
+      p->swap_data[i].off = 0;
     }
   }
     *pte = 0;
@@ -243,10 +247,8 @@ uvmfirst(pagetable_t pagetable, uchar *src, uint sz)
 uint64
 uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm, int opFlag)
 {
-  struct proc *p = myproc();
   char *mem;
   uint64 a;
-  pte_t *pte;
 
 
   if(newsz < oldsz)
@@ -265,19 +267,24 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm, int opFla
       uvmdealloc(pagetable, a, oldsz);
       return 0;
     }
-    if (p->pid > 2)
-    {
-      if (p->ram < MAX_PSYC_PAGES){
-        if (update_meta(p,a,1,-1) == -1)
-          printf("error at update_meta\n");
+    #if !NONE
+      pte_t *pte;
+      struct proc *p = myproc();
+
+      if (p->pid > 2)
+      {
+        if (p->ram < MAX_PSYC_PAGES){
+          if (update_meta(p,a,1,-1) == -1)
+            printf("error at update_meta\n");
+        }
+        else{
+          pte = walk(p->pagetable,a,0);
+          // if (opFlag)
+          //   end_op();
+          insert_to_swapFile(p,pte,a,-1);
+        }
       }
-      else{
-        pte = walk(p->pagetable,a,0);
-        // if (opFlag)
-        //   end_op();
-        insert_to_swapFile(p,pte,a,-1);
-      }
-    }
+    #endif
   }
   return newsz;
 }

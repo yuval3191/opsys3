@@ -125,6 +125,7 @@ struct proc {
 
   struct file *swapFile;
   meta swap_data[MAX_TOTAL_PAGES];
+  int  swap_location[MAX_TOTAL_PAGES];
   int ram;
   int swap;
   int timeId;

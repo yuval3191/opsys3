@@ -33,13 +33,15 @@ copy_swapFile(struct proc *p,struct proc *np)
   for (int i = 0; i < MAX_TOTAL_PAGES && stat != -1; i++)
   {
     char *buff = kalloc();
-    readFromSwapFile(p, buff, p->swap_data[i].off, PGSIZE);
-    writeToSwapFile(np,buff,p->swap_data[i].off,PGSIZE);
+    readFromSwapFile(p, buff, i*PGSIZE, PGSIZE);
+    writeToSwapFile(np,buff,i*PGSIZE,PGSIZE);
     kfree(buff);
 
     np->swap_data[i].state = p->swap_data[i].state;
     np->swap_data[i].state = p->swap_data[i].startVa;
     np->swap_data[i].createTime = p->swap_data[i].createTime;
+    np->swap_data[i].off = p->swap_data[i].off;
+    np->swap_location[i] = p->swap_location[i];
 
   }
 
@@ -61,6 +63,8 @@ static void sortArrayByCreateTime(meta array[], int size) {
         }
     }
 }
+
+// int get_real_off_in_file()
 
 
 int find_page_SCFIFO(struct proc *p)
@@ -144,11 +148,11 @@ int update_meta(struct proc *p,uint64 va,int ramFlag, int index)
     ret = index;
   }
 
-  #if NFUA
+  #if SWAP_ALGO == NFUA
     p->swap_data[ret].counter = 0;
   #endif
   
-  #if LAPA
+  #if SWAP_ALGO == LAPA
     p->swap_data[ret].counter = 0xFFFFFFFF;
   #endif
 
@@ -157,6 +161,17 @@ int update_meta(struct proc *p,uint64 va,int ramFlag, int index)
   /*need to check my logic*/
   printf("over 32\n");
   exit(-1);
+  return -1;
+}
+
+int
+find_free_location_swapfile(struct proc *p){
+  for (int i = 0; i < MAX_TOTAL_PAGES; i++)
+  {
+    if (p->swap_location[i] == 0){
+      return i;
+    }
+  }
   return -1;
 }
 
@@ -271,7 +286,14 @@ insert_to_ram(struct proc *p, pte_t *pte, uint64 startVa)
   }
   char *pa = kalloc();
 
-  readFromSwapFile(p,pa,p->swap_data[i].off,PGSIZE);
+ int stat = readFromSwapFile(p,pa,p->swap_data[i].off,PGSIZE);
+ //debug
+ if (stat ==  -1){
+    printf("error readFromSwapFile\n");
+ }
+ int k = p->swap_data[i].off/PGSIZE;
+ p->swap_location[k] = 0;
+
 
   p->swap_data[i].state = RAM;
   p->ram++;
@@ -303,7 +325,14 @@ insert_to_swapFile(struct proc *p, pte_t *pte, uint64 startVa,int index)
     printf("error in update_meta\n");
     return -1;
   }
-  writeToSwapFile(p, (char *) PTE2PA(*pte), p->swap_data[i].off, PGSIZE);
+  int k = find_free_location_swapfile(p);
+  if (k != -1){
+    p->swap_data[i].off = k*PGSIZE;
+    p->swap_location[k] = 1;
+  }
+  int ret = writeToSwapFile(p, (char *) PTE2PA(*pte), p->swap_data[i].off, PGSIZE);
+  if (ret == -1)
+    printf("poop");
   kfree((void *) PTE2PA(*pte));
 
   /*debuge, should we change it?*/
@@ -345,7 +374,7 @@ procinit(void)
       p->kstack = KSTACK((int) (p - proc));
       for (int i = 0; i < MAX_TOTAL_PAGES; i++)
       {
-        p->swap_data[i].off = i * PGSIZE;
+        p->swap_data[i].off = 0;
         p->swap_data[i].state = FREE;
       } 
   }
@@ -787,8 +816,9 @@ scheduler(void)
         c->proc = p;
         swtch(&c->context, &p->context);
 
-        #if (NFUA || LAPA)
-          update_aging(p);
+        #if (SWAP_ALGO == NFUA || SWAP_ALGO == LAPA)
+          if(p->pid > 2)
+            update_aging(p);
         #endif
         // Process is done running for now.
         // It should have changed its p->state before coming back.

@@ -287,11 +287,11 @@ int main(int argc, char *argv[])
     // test6();
     //     printf("start test7\n");
 
-    // test7();
-    //     printf("start test8\n");
+    test7();
+        printf("start test8\n");
 
-    test8(); //with sbrk
-        printf("end all tests!\n");
+    // test8(); //with sbrk
+    //     printf("end all tests!\n");
 
     
     exit(0);

@@ -126,6 +126,8 @@ exec(char *path, char **argv)
             p->ram--;
           }
         p->swap_data[i].state = FREE;
+        p->swap_location[i] = 0;
+        p->swap_data[i].off = 0;
       }     
       for(uint i = 0, a = 0; a < sz; a += PGSIZE, i ++){
         p->swap_data[i].startVa = a;

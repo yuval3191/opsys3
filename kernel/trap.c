@@ -67,42 +67,49 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  }else if(r_scause() == 13 || r_scause() == 15 )
-  {
-    // printf("val: %d\n",r_stval());
-    uint64 add = PGROUNDDOWN(r_stval());
-    pte_t *pte = walk(p->pagetable,add,0);
-
-    if(pte != 0 && ((*pte & PTE_V) == 0) && ((*pte & PTE_PG) != 0)){
-      if (p->ram == MAX_PSYC_PAGES)
-      {
-        int i = -1;
-        #if NFUA
-          i = find_page_NFUA(p);
-        #endif
-
-        #if LAPA
-          i = find_page_LAPA(p);
-        #endif
-
-        #if SCFIFO
-          i = find_page_SCFIFO(p);
-        #endif
-
-        #ifndef SWAP_ALGO
-          i = find_page_in_ram(p);
-        #endif
-
-        if (i == -1){
-          printf("error, no ram?!!!!\n");
-          exit(-1);
-        }
-        pte_t *pte2 = walk(p->pagetable,p->swap_data[i].startVa,0);
-        insert_to_swapFile(p,pte2,p->swap_data[i].startVa,i);
-        insert_to_ram(p,pte,add);
-      }    
-    }
   }
+  #if !NONE
+    else if(r_scause() == 13 || r_scause() == 15 )
+    {
+      // printf("val: %d\n",r_stval());
+      uint64 add = PGROUNDDOWN(r_stval());
+      pte_t *pte = walk(p->pagetable,add,0);
+
+
+      if(pte != 0 && ((*pte & PTE_V) == 0) && ((*pte & PTE_PG) != 0)){
+        if (p->ram == MAX_PSYC_PAGES)
+        {
+          int i = -1;
+          #if SWAP_ALGO == NFUA
+            i = find_page_NFUA(p);
+            printf("NFUA %d\n",i);
+          #endif
+
+          #if SWAP_ALGO == LAPA
+            i = find_page_LAPA(p);
+            printf("LAPA %d\n",i);
+          #endif
+
+          #if SWAP_ALGO == SCFIFO
+            i = find_page_SCFIFO(p);
+            printf("SCFIFO %d\n",i);
+          #endif
+
+          #ifndef SWAP_ALGO
+            i = find_page_in_ram(p);
+          #endif
+
+          if (i == -1){
+            printf("error, no ram?!!!!\n");
+            exit(-1);
+          }
+          pte_t *pte2 = walk(p->pagetable,p->swap_data[i].startVa,0);
+          insert_to_swapFile(p,pte2,p->swap_data[i].startVa,i);
+          insert_to_ram(p,pte,add);
+        }    
+      }
+    }
+  #endif
    else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
